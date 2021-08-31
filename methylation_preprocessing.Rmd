@@ -1,0 +1,187 @@
+---
+title: "Methylation data pre-processing"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+load("na.omit_TCGA_BRCA_methylation450_tsv_gz.Rdata") ## load the original data 
+head(na.omit_TCGA_BRCA_methylation450_tsv_gz)
+
+row.names(na.omit_TCGA_BRCA_methylation450_tsv_gz) <- na.omit_TCGA_BRCA_methylation450_tsv_gz[,1] ## removes the first column which is the cg i
+head(na.omit_TCGA_BRCA_methylation450_tsv_gz)
+
+na.omit_TCGA_BRCA_methylation450_tsv_gz <- na.omit_TCGA_BRCA_methylation450_tsv_gz[,-1] ## removes the first column which is the cg id
+
+head(na.omit_TCGA_BRCA_methylation450_tsv_gz)
+
+na.omit_TCGA_BRCA_methylation450.matrix <- as.matrix(na.omit_TCGA_BRCA_methylation450_tsv_gz) ## convert to matrix form
+
+class(na.omit_TCGA_BRCA_methylation450.matrix) <- "numeric" ## converts the data to a numeric matrix 
+head(na.omit_TCGA_BRCA_methylation450.matrix)
+save(na.omit_TCGA_BRCA_methylation450.matrix,file = "na.omit_TCGA_BRCA_methylation450.matrix.Rdata") ## save the file 
+```
+## Filtering the data using champ
+```{r}
+/state/partition1/pbs/tmpdir/pbs.744755.awonmgr2
+cd /home/uqmdeluc
+library(ChAMP)
+laad("na.omit_TCGA_BRCA_methylation450.matrix.Rdata")
+##generate a phenotype data
+dim(na.omit_TCGA_BRCA_methylation450.matrix) # 363791    890
+samples.df.meth <- as.data.frame(colnames(na.omit_TCGA_BRCA_methylation450.matrix))
+
+colnames(samples.df.meth) <- "Sample_Name" # will contain the TSS data for the sample
+samples.df.meth$Sample_Name <- as.character(samples.df.meth$Sample_Name)
+
+samples.df.meth$TSS <-  lapply(strsplit(x = samples.df.meth$Sample_Name,split = "-"),"[",2)
+
+
+BRCA.fil <- champ.filter(beta=na.omit_TCGA_BRCA_methylation450.matrix,
+             M=NULL,
+pd=samples.df.meth,
+intensity=NULL,
+Meth=NULL,
+UnMeth=NULL,
+detP=NULL,
+beadcount=NULL,
+autoimpute=F,
+filterDetP=TRUE,
+ProbeCutoff=0,
+SampleCutoff=0.1,
+detPcut=0.01,
+filterBeads=TRUE,
+beadCutoff=0.05,
+filterNoCG = TRUE,
+filterSNPs = TRUE,
+population = NULL,
+filterMultiHit = TRUE,
+filterXY = TRUE,
+fixOutlier = TRUE,
+arraytype = "450K")
+####
+[ Section 1:  Check Input Start ]
+  You have inputed beta for Analysis.
+
+  pd file provided, checking if it's in accord with Data Matrix...
+    pd file check success.
+
+  Parameter filterDetP is TRUE, checking if detP in accord with Data Matrix...
+    !!! Parameter detP is not found, filterDetP is reset FALSE now.
+
+  Parameter filterBeads is TRUE, checking if beadcount in accord with Data Matrix...
+    !!! Parameter beadcount is not found, filterBeads is reset FALSE now.
+
+  Checking Finished :filterMultiHit,filterSNPs,filterNoCG,filterXY would be done on beta.
+[ Section 1: Check Input Done ]
+
+
+[ Section 2: Filtering Start >>
+
+  Filtering NoCG Start
+    Only Keep CpGs, removing 1024 probes from the analysis.
+
+  Filtering SNPs Start
+    Using general 450K SNP list for filtering.
+    Filtering probes with SNPs as identified in Zhou's Nucleic Acids Research Paper 2016.
+    Removing 21923 probes from the analysis.
+
+  Filtering MultiHit Start
+    Filtering probes that align to multiple locations as identified in Nordlund et al
+    Removing 4 probes from the analysis.
+
+  Filtering XY Start
+    Filtering probes located on X,Y chromosome, removing 8272 probes from the analysis.
+
+  Updating PD file
+    filterDetP parameter is FALSE, so no Sample Would be removed.
+
+  Fixing Outliers Start
+    Replacing all value smaller/equal to 0 with smallest positive value.
+    Replacing all value greater/equal to 1 with largest value below 1..
+[ Section 2: Filtering Done ]
+
+ All filterings are Done, now you have 332568 probes and 890 samples.
+
+[<<<<< ChAMP.FILTER END >>>>>>]
+[===========================]
+[You may want to process champ.QC() next.]
+ 
+
+save(BRCA.fil,file = "BRCA.fil.Rdata") ## save the initial file
+save(samples.df.meth,file = "samples.df.meth.Rdata")
+```
+
+```{r}
+/state/partition1/pbs/tmpdir/pbs.745075.awonmgr2
+load("BRCA.fil.Rdata")
+library("doParallel")
+detectCores()
+library(ChAMP)
+
+BRCA.fil.norm <- champ.norm(beta=BRCA.fil$beta,
+           resultsDir="./CHAMP_Normalization/",
+           method="BMIQ",
+           plotBMIQ=T,
+           arraytype="450K",
+           cores=4)
+```
+
+
+```{r}
+samples.df.meth <-  as.data.frame(colnames(BRCA.fil.norm))
+colnames(samples.df.meth) <- "Sample_Name"
+samples.df.meth$Sample_Name <- as.character(samples.df.meth$Sample_Name)
+samples.df.meth$Patient <- rapply(lapply(strsplit(samples.df.meth$Sample_Name,split = "-"),"[",1:3),f = paste,collapse = "-") ## add patient id only for matching purpose 
+save(samples.df.meth,file = "samples.df.meth.Rdata")
+
+
+
+batches.methylation$Sample_Name <- rapply(lapply(strsplit(batches.methylation$Sample,split = "-"),"[",1:4),f = paste,collapse = "-")
+
+## check that the information we need for the sample of intewrest is present in the phenotype dataframne for the  batch effect calculation and cortecitonusing the chop methulation 
+all(samples.df.meth$Sample_Name %in% batches.methylation$Sample_Name)
+length(which(samples.df.meth$Sample_Name %in% batches.methylation$Sample_Name) == T)
+samples.df.meth$Sample_Name [!(samples.df.meth$Sample_Name %in% batches.methylation$Sample_Name)]
+
+all(samples.df.meth$Patient %in% batches.methylation$Patient)
+samples.df.meth$Patient [!(samples.df.meth$Patient %in% batches.methylation$Patient)]
+
+```
+## assess the presence of batch effects in the dats 
+```{r}
+library(ChAMP)
+## Filter the methylation data to only keep  those with batch effect data aavail 
+all(colnames(BRCA.fil.norm) == samples.df.meth$Sample_Name) ## true, therefore proceed 
+samples.df.meth.fil <-  samples.df.meth[which(samples.df.meth$Sample_Name %in% batches.methylation$Sample_Name),]
+BRCA.fil.norm.fil <- BRCA.fil.norm[,which(colnames(BRCA.fil.norm) %in% samples.df.meth.fil$Sample_Name)]
+all(colnames(BRCA.fil.norm.fil) == samples.df.meth.fil$Sample_Name) ## true, therefore proceed 
+batches.methylation.svd <- batches.methylation[,c("Sample_Name","TSS","BatchId","PlateId","ShipDate")]
+## rearrange the methylatio data such that it is arranged according to the order of the samples 
+batches.methylation.svd <- batches.methylation.svd[match(colnames(BRCA.fil.norm.fil), batches.methylation.svd$Sample_Name),]
+save(batches.methylation.svd,file = "batches.methylation.svd.Rdata")
+## check that the order of the samples is the same across the  phenotype and the methylation data
+all(colnames(BRCA.fil.norm.fil) == batches.methylation.svd$Sample_Name) ## true, therefore proceed 
+
+champ.SVD(beta = BRCA.fil.norm.fil,
+              rgSet=NULL,
+              pd=batches.methylation.svd,
+              RGEffect=FALSE,
+              PDFplot=TRUE,
+              Rplot=TRUE,
+              resultsDir="/home/uqmdeluc/CHAMP_SVDimages/")
+
+BRCA.fil.norm.fil.input <- t(BRCA.fil.norm.fil) ## transform the data such that genes are now in the columns 
+BRCA.fil.norm.fil.pca <- prcomp(BRCA.fil.norm.fil.input, center = TRUE,scale. = TRUE)
+save(BRCA.fil.norm.fil.pca,file = "BRCA.fil.norm.fil.pca.Rdata")
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
