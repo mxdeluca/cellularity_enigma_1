@@ -178,6 +178,10 @@ BRCA.fil.norm.fil.input <- t(BRCA.fil.norm.fil) ## transform the data such that 
 BRCA.fil.norm.fil.pca <- prcomp(BRCA.fil.norm.fil.input, center = TRUE,scale. = TRUE)
 save(BRCA.fil.norm.fil.pca,file = "BRCA.fil.norm.fil.pca.Rdata")
 ```
+```{r}
+dim(BRCA.fil.norm.fil.pca$rotation$) ## check the loadings
+
+```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
 
