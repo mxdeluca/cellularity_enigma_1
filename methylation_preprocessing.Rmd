@@ -182,33 +182,6 @@ samples.df.meth$Patient [!(samples.df.meth$Patient %in% batches.methylation$Pati
 ```
 ## assess the presence of batch effects in the dats 
 ```{r}
-library(ChAMP)
-## Filter the methylation data to only keep  those with batch effect data aavail 
-all(colnames(BRCA.fil.norm) == samples.df.meth$Sample_Name) ## true, therefore proceed 
-samples.df.meth.fil <-  samples.df.meth[which(samples.df.meth$Sample_Name %in% batches.methylation$Sample_Name),]
-BRCA.fil.norm.fil <- BRCA.fil.norm[,which(colnames(BRCA.fil.norm) %in% samples.df.meth.fil$Sample_Name)]
-all(colnames(BRCA.fil.norm.fil) == samples.df.meth.fil$Sample_Name) ## true, therefore proceed 
-batches.methylation.svd <- batches.methylation[,c("Sample_Name","TSS","BatchId","PlateId","ShipDate")]
-## rearrange the methylatio data such that it is arranged according to the order of the samples 
-batches.methylation.svd <- batches.methylation.svd[match(colnames(BRCA.fil.norm.fil), batches.methylation.svd$Sample_Name),]
-save(batches.methylation.svd,file = "batches.methylation.svd.Rdata")
-## check that the order of the samples is the same across the  phenotype and the methylation data
-all(colnames(BRCA.fil.norm.fil) == batches.methylation.svd$Sample_Name) ## true, therefore proceed 
-
-champ.SVD(beta = BRCA.fil.norm.fil,
-              rgSet=NULL,
-              pd=batches.methylation.svd,
-              RGEffect=FALSE,
-              PDFplot=TRUE,
-              Rplot=TRUE,
-              resultsDir="/home/uqmdeluc/CHAMP_SVDimages/")
-
-BRCA.fil.norm.fil.input <- t(BRCA.fil.norm.fil) ## transform the data such that genes are now in the columns 
-BRCA.fil.norm.fil.pca <- prcomp(BRCA.fil.norm.fil.input, center = TRUE,scale. = TRUE)
-save(BRCA.fil.norm.fil.pca,file = "BRCA.fil.norm.fil.pca.Rdata")
-```
-```{r}
-dim(BRCA.fil.norm.fil.pca$rotation$) ## check the loadings
 
 ```
 
