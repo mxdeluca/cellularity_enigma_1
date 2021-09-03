@@ -182,9 +182,38 @@ samples.df.meth$Patient [!(samples.df.meth$Patient %in% batches.methylation$Pati
 ```
 ## assess the presence of batch effects in the dats 
 ```{r}
+batches <- read.delim("~/Downloads/e6665e30546434303dd06d1c296a30ac-data/original/batches.tsv") # downloaded data from https://bioinformatics.mdanderson.org/MQA/
+# identify which of these samples are tumopur samples  
+batches$tumour_status <- lapply(strsplit(x = batches$Sample,split = "-"),"[[",4)
+batches$tumour_status <- as.numeric(substr(batches$tumour_status ,1,nchar(batches$tumour_status )-1))
+batches.tum <- batches[which(batches$tumour_status %in% seq(1-9)),]
 
+
+samples.df.met.batch <- samples.df.meth[which(samples.df.meth$Patient %in% batches.tum$Patient),]# 884/890 available
+dim(samples.df.met.batch) # 884   2884   2
+setwd("/Users/xavierdeluca/Desktop/post_doc/")
+save(samples.df.met.batch,file = "samples.df.met.batch.Rdata") ##sample information for those samples with batch information 
+
+
+#  Because they collapse samples for the same patient, batch information becomes problematic to source.....
+batches.tum.avail <- batches.tum[which(batches.tum$Patient %in% samples.df.meth$Patient),] ## only keep batch info for the sample we need 
+dim(batches.tum.avail) ## 794  11 represents 794 unique patients
+## fill in the batch effect info : 
+samples.df.met.batch$TSS <- NA ## add TSS info
+samples.df.met.batch$ship_date <- NA ## cant add this one as theres multiple netries for each patient for some of the samples...
+ samples.df.met.batch$batch_id <- NA # add batch id info
+for(i in seq_along(1:dim(samples.df.met.batch)[1])){
+  samples.df.met.batch$TSS[i] <- unique(batches.tum$TSS[which(batches.tum$Patient == samples.df.met.batch$Patient[i])])
+  #samples.df.met.batch$ship_date[i] <- list(unique(batches.tum$ShipDate[which(batches.tum$Patient == samples.df.met.batch$Patient[i])]))
+  samples.df.met.batch$batch_id[i] <-  unique(batches.tum$BatchId[which(batches.tum$Patient == samples.df.met.batch$Patient[i])])
+
+}
+
+ save(samples.df.met.batch,file = "samples.df.met.batch.Rdata") ## save ethe samples for which we have methylation and batch info ready to go.
+
+batches.tum.avail.test <- unique(batches.tum.avail[,c("Sample","Patient","BatchId","TSS")])
 ```
-
+## decided not to further correct for batch effeects given the findings by MBatch online ! 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
 
 When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
