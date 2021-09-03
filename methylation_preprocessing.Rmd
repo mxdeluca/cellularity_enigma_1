@@ -24,21 +24,35 @@ class(na.omit_TCGA_BRCA_methylation450.matrix) <- "numeric" ## converts the data
 head(na.omit_TCGA_BRCA_methylation450.matrix)
 save(na.omit_TCGA_BRCA_methylation450.matrix,file = "na.omit_TCGA_BRCA_methylation450.matrix.Rdata") ## save the file 
 ```
-## Filtering the data using champ
+
+######################## Filtering the data using champ #############################
+# qsub -I -l select=1:ncpus=4:mem=60GB -l walltime=00:60:00 -A UQ-Health-SOM
+cd $TMPDIR
+pwd
+/state/partition1/pbs/tmpdir/pbs.746630.awonmgr2
+cd /home/uqmdeluc/
+cp na.omit_TCGA_BRCA_methylation450.matrix.Rdata $TMPDIR
+cp samples.df.meth.Rdata $TMPDIR
+cp HM450.hg38.manifest.tsv.gz $TMPDIR
+cd /home/uqmdeluc/R-3.6.1/bin/
+./R
 ```{r}
-/state/partition1/pbs/tmpdir/pbs.744755.awonmgr2
 cd /home/uqmdeluc
 library(ChAMP)
-laad("na.omit_TCGA_BRCA_methylation450.matrix.Rdata")
+setwd("/state/partition1/pbs/tmpdir/pbs.746630.awonmgr2")
+load("samples.df.meth.Rdata") # load the phenotype data
+##generate a phenotype data
+load("na.omit_TCGA_BRCA_methylation450.matrix.Rdata") # load the methylation data
 ##generate a phenotype data
 dim(na.omit_TCGA_BRCA_methylation450.matrix) # 363791    890
 samples.df.meth <- as.data.frame(colnames(na.omit_TCGA_BRCA_methylation450.matrix))
-
-colnames(samples.df.meth) <- "Sample_Name" # will contain the TSS data for the sample
+colnames(samples.df.meth) <- "Sample_Name"
 samples.df.meth$Sample_Name <- as.character(samples.df.meth$Sample_Name)
+samples.df.meth$Patient <- rapply(lapply(strsplit(samples.df.meth$Sample_Name,split = "-"),"[",1:3),f = paste,collapse = "-") ## add patient id only for matching purpose 
+save(samples.df.meth,file = "samples.df.meth.Rdata")
 
-samples.df.meth$TSS <-  lapply(strsplit(x = samples.df.meth$Sample_Name,split = "-"),"[",2)
-
+# check if column of the matrix is the same as the phenotype data 
+all(samples.df.meth$Sample_Name == colnames(na.omit_TCGA_BRCA_methylation450.matrix)) ## TRUE, therefore  proceed with further filtering 
 
 BRCA.fil <- champ.filter(beta=na.omit_TCGA_BRCA_methylation450.matrix,
              M=NULL,
@@ -63,6 +77,17 @@ filterXY = TRUE,
 fixOutlier = TRUE,
 arraytype = "450K")
 ####
+[===========================]
+[<<<< ChAMP.FILTER START >>>>>]
+-----------------------------
+
+In New version ChAMP, champ.filter() function has been set to do filtering on the result of champ.import(). You can use champ.import() + champ.filter() to do Data Loading, or set "method" parameter in champ.load() as "ChAMP" to get the same effect.
+
+This function is provided for user need to do filtering on some beta (or M) matrix, which contained most filtering system in champ.load except beadcount. User need to input beta matrix, pd file themselves. If you want to do filterintg on detP matrix and Bead Count, you also need to input a detected P matrix and Bead Count information.
+
+Note that if you want to filter more data matrix, say beta, M, intensity... please make sure they have exactly the same rownames and colnames.
+
+
 [ Section 1:  Check Input Start ]
   You have inputed beta for Analysis.
 
@@ -111,35 +136,39 @@ arraytype = "450K")
 [You may want to process champ.QC() next.]
  
 
+############ Further filtering using the Zhou data##################
+
+#Load the Zhou dataset 
+HM450.hg38.manifest.tsv <- read.delim("HM450.hg38.manifest.tsv.gz", stringsAsFactors=FALSE)
+##check if any prove in the general masked ce
+probes.data <- row.names(BRCA.fil$beta)
+length(probes.data)  # 332568
+probes_masked <- HM450.hg38.manifest.tsv$probeID[HM450.hg38.manifest.tsv$MASK_general == T] ## identified the probes which should be masked 
+# Identify if any probes that should be masked  but is not; this should be zero, hopefully
+problem.probe <- probes.data[which(probes.data %in% probes_masked )]
+length(problem.probe)
+# proceed to remove these additional 2932 probes 
+BRCA.fil.z <- BRCA.fil
+BRCA.fil.z$beta <- BRCA.fil.z$beta[!(row.names(BRCA.fil.z$beta) %in% probes_masked),]
+dim(BRCA.fil.z$beta) ## expect dim[1] == 329636 ??
 save(BRCA.fil,file = "BRCA.fil.Rdata") ## save the initial file
-save(samples.df.meth,file = "samples.df.meth.Rdata")
-```
+save(BRCA.fil.z,file = "BRCA.fil.z.Rdata") ## save the initial file
 
-```{r}
-/state/partition1/pbs/tmpdir/pbs.745075.awonmgr2
-load("BRCA.fil.Rdata")
-library("doParallel")
-detectCores()
-library(ChAMP)
+########################## Data normalization #################################
 
-BRCA.fil.norm <- champ.norm(beta=BRCA.fil$beta,
+BRCA.fil.norm <- champ.norm(beta=BRCA.fil.z$beta,
            resultsDir="./CHAMP_Normalization/",
            method="BMIQ",
            plotBMIQ=T,
            arraytype="450K",
            cores=4)
+save(BRCA.fil.norm,file = "BRCA.fil.norm.Rdata")
 ```
 
-
+## Estimating the presence of batch effects in the methylation 
+# Batch effect data was obtained from https://bioinformatics.mdanderson.org/MQA/
 ```{r}
-samples.df.meth <-  as.data.frame(colnames(BRCA.fil.norm))
-colnames(samples.df.meth) <- "Sample_Name"
-samples.df.meth$Sample_Name <- as.character(samples.df.meth$Sample_Name)
-samples.df.meth$Patient <- rapply(lapply(strsplit(samples.df.meth$Sample_Name,split = "-"),"[",1:3),f = paste,collapse = "-") ## add patient id only for matching purpose 
-save(samples.df.meth,file = "samples.df.meth.Rdata")
-
-
-
+load("batches.methylation")
 batches.methylation$Sample_Name <- rapply(lapply(strsplit(batches.methylation$Sample,split = "-"),"[",1:4),f = paste,collapse = "-")
 
 ## check that the information we need for the sample of intewrest is present in the phenotype dataframne for the  batch effect calculation and cortecitonusing the chop methulation 
