@@ -31,11 +31,11 @@ cd $TMPDIR
 pwd
 /state/partition1/pbs/tmpdir/pbs.746630.awonmgr2
 cd /home/uqmdeluc/
-cp na.omit_TCGA_BRCA_methylation450.matrix.Rdata $TMPDIR
+cp BRCA.fil.norm.batch.avail.Rdata $TMPDIR
 cp samples.df.meth.Rdata $TMPDIR
-cp HM450.hg38.manifest.tsv.gz $TMPDIR
 cd /home/uqmdeluc/R-3.6.1/bin/
 ./R
+
 ```{r}
 cd /home/uqmdeluc
 library(ChAMP)
@@ -165,20 +165,43 @@ BRCA.fil.norm <- champ.norm(beta=BRCA.fil.z$beta,
 save(BRCA.fil.norm,file = "BRCA.fil.norm.Rdata")
 ```
 
-## Estimating the presence of batch effects in the methylation 
+########### Estimating the presence of batch effects in the methylation ################ 
 # Batch effect data was obtained from https://bioinformatics.mdanderson.org/MQA/
 ```{r}
-load("batches.methylation")
-batches.methylation$Sample_Name <- rapply(lapply(strsplit(batches.methylation$Sample,split = "-"),"[",1:4),f = paste,collapse = "-")
+load("/home/uqmdeluc/methylation_preprocessing/BRCA.fil.norm.Rdata")
+load("samples.df.met.batch.Rdata")
+# filter the normalized data to isolate the samples for which we have batch infor 
+BRCA.fil.norm.batch.avail <- BRCA.fil.norm[,which(colnames(BRCA.fil.norm) %in% samples.df.met.batch$Sample_Name)]
+dim(BRCA.fil.norm.batch.avail) #  329636    884, as expected 
+save(BRCA.fil.norm.batch.avail,file = "BRCA.fil.norm.batch.avail.Rdata")
+## check order of samples in the pheno and the actual data 
+all(colnames(BRCA.fil.norm.batch.avail) == samples.df.met.batch$Sample_Name)  ## all good ! 
+# Estimate batch effects for TSS  
+library(kBET)
+input.kBET <- t(BRCA.fil.norm.batch.avail)
+batch.estimate.TSS <- kBET(input.kBET,samples.df.met.batch$TSS)
+save(batch.estimate.TSS,file = "batch.estimate.TSS.Rdata")
+################### Estimate batch effects for batch_id ####################
+# qsub -I -l select=1:ncpus=4:mem=60GB -l walltime=00:60:00 -A UQ-Health-SOM
+cd $TMPDIR
+pwd
+/state/partition1/pbs/tmpdir/pbs.747131.awonmgr2
+cd /home/uqmdeluc/
+cp BRCA.fil.norm.batch.avail.Rdata $TMPDIR
+cp samples.df.meth.Rdata $TMPDIR
+cd /home/uqmdeluc/R-3.6.1/bin/
+./R
+```{r}
+setwd("/state/partition1/pbs/tmpdir/pbs.747131.awonmgr2")
+load("BRCA.fil.norm.batch.avail.Rdata")
+load("/home/uqmdeluc/methylation_preprocessing/samples.df.met.batch.Rdata")
+## check order of samples in the pheno and the actual data 
+all(colnames(BRCA.fil.norm.batch.avail) == samples.df.met.batch$Sample_Name)  ## all good ! 
 
-## check that the information we need for the sample of intewrest is present in the phenotype dataframne for the  batch effect calculation and cortecitonusing the chop methulation 
-all(samples.df.meth$Sample_Name %in% batches.methylation$Sample_Name)
-length(which(samples.df.meth$Sample_Name %in% batches.methylation$Sample_Name) == T)
-samples.df.meth$Sample_Name [!(samples.df.meth$Sample_Name %in% batches.methylation$Sample_Name)]
-
-all(samples.df.meth$Patient %in% batches.methylation$Patient)
-samples.df.meth$Patient [!(samples.df.meth$Patient %in% batches.methylation$Patient)]
-
+library(kBET)
+input.kBET <- t(BRCA.fil.norm.batch.avail)
+batch.estimate.batch_id <- kBET(input.kBET,samples.df.met.batch$batch_id)
+save(batch.estimate.batch_id,file = "batch.estimate.batch_id.Rdata")
 ```
 ## assess the presence of batch effects in the dats 
 ```{r}
