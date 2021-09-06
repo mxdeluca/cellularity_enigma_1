@@ -12,8 +12,11 @@ batches.RNA <- read_delim("~/Downloads/e6665e30546434303dd06d1c296a30ac-data 2/o
      delim = "\t", escape_double = FALSE, 
     trim_ws = TRUE)
 batches.RNA$Sample_Name <- rapply(f = paste, object = lapply(strsplit(x = batches.RNA$Sample, split = "-"),"[",1:4),collapse = "-")
+# Check the number of unique samples 
+length(unique(batches.RNA$Sample_Name)) # 1217 unique samples, therefore some duplication present 
+test <- batches.RNA[which(batches.RNA$Sample_Name %in% batches.RNA$Sample_Name[which(duplicated(batches.RNA$Sample_Name) == T)]),]
 ```
-# read in the methylation data 
+# read in the RNAseq data obtained from https://xenabrowser.net/datapages/?dataset=TCGA-BRCA.htseq_counts.tsv&host=https%3A%2F%2Fgdc.xenahubs.net&removeHub=https%3A%2F%2Fxena.treehouse.gi.ucsc.edu%3A443 selected  the RNAseq-HTSeq counts
 ```{r}
 TCGA.BRCA.htseq_counts.tsv.gz <- read.delim("~/Desktop/post_doc/TCGA-BRCA.htseq_counts.tsv.gz.tsv")
 samples.RNA.df <- as.data.frame(colnames(TCGA.BRCA.htseq_counts.tsv.gz)[-1])
@@ -21,8 +24,9 @@ colnames(samples.RNA.df) <- "Sample_Name"
 samples.RNA.df$Sample_Name <- gsub(pattern = "\\.",replacement = "-",x = samples.RNA.df$Sample_Name)
 samples.RNA.df$Patient <- rapply(f = paste,object = lapply(strsplit(split = "-", samples.RNA.df$Sample_Name),"[",1:3),collapse = "-")
 # check which one has batch data 
-length(which(samples.RNA.df$Patient %in% batches.RNA$Patient)) # 1216 samples 
-
+length(which(samples.RNA.df$Patient %in% batches.RNA$Patient)) # 1216 samples  (includes normals and tumours)
+samples.RNA.df$Tumour_status <- lapply(strsplit(samples.RNA.df$Sample_Name,split = "-"),"[[",4) ## obtain the tumour status of the tumour
+samples.RNA.df$Tumour_status <- substr(samples.RNA.df$Tumour_status,1,nchar(samples.RNA.df$Tumour_status)-1) ## remove the last letter
 ## rename  the dataframe 
 colnames(TCGA.BRCA.htseq_counts.tsv.gz)  <-  gsub(pattern = "\\.",replacement = "-",x = colnames(TCGA.BRCA.htseq_counts.tsv.gz))
 row.names(TCGA.BRCA.htseq_counts.tsv.gz) <- TCGA.BRCA.htseq_counts.tsv.gz$Ensembl_ID
@@ -31,6 +35,36 @@ TCGA.BRCA.htseq_counts.tsv.gz$Ensembl_ID <- NULL
 TCGA.BRCA.htseq_counts.fil <- TCGA.BRCA.htseq_counts.tsv.gz[,which(colnames(TCGA.BRCA.htseq_counts.tsv.gz) %in% batches.RNA$Sample_Name)]
 dim(TCGA.BRCA.htseq_counts.fil)  # 60488  1217  ## sample batch info available for all samples! 
 save(TCGA.BRCA.htseq_counts.fil,file = "TCGA.BRCA.htseq_counts.fil.Rdata")
+head(TCGA.BRCA.htseq_counts.fil[1:10,1:10])
+
+```
+# need to further remove the samples for which  there was aggregation of the data in a single point of methylation.
+```{r}
+TCGA.BRCA.htseq_counts.fil.no_agg <- TCGA.BRCA.htseq_counts.fil[,-which(colnames(TCGA.BRCA.htseq_counts.fil) %in% batches.RNA$Sample_Name[which(duplicated(batches.RNA$Sample_Name) == T)])]
+dim(TCGA.BRCA.htseq_counts.fil.no_agg) #  60488  1212 lost 5 samples
+
+```
+# Load the annotation data for the gene
+```{r}
+ gencode_v22_annotation_gene <- read_delim("~/Downloads/gencode.v22.annotation.gene.probeMap","\t", escape_double = FALSE, trim_ws = TRUE)
+
+```
+## Deciding on the pathway for preprocessing the RNAseq data 
+```{r}
+library(DESeq2)
+## need to round to integer 
+TCGA.BRCA.htseq_counts.fil.no_agg.rounded <- round(TCGA.BRCA.htseq_counts.fil.no_agg)
+# generating the phenotype dataframe for the  dataframe 
+batches.RNA.fil.no_agg.rounded <- batches.RNA[which(batches.RNA$Sample_Name %in% colnames(TCGA.BRCA.htseq_counts.fil.no_agg.rounded)),]
+batches.RNA.fil.no_agg.rounded <- batches.RNA.fil.no_agg.rounded[match(colnames(TCGA.BRCA.htseq_counts.fil.no_agg.rounded),batches.RNA.fil.no_agg.rounded$Sample_Name),]
+#check the order of the names to make sure it matches
+all(colnames(TCGA.BRCA.htseq_counts.fil.no_agg.rounded) == batches.RNA.fil.no_agg.rounded$Sample_Name) # TRUE
+row.names(batches.RNA.fil.no_agg.rounded) <- batches.RNA.fil.no_agg.rounded$Sample_Name
+# creagte a DESeq object 
+head(TCGA.BRCA.htseq_counts.fil.no_agg.rounded[1:10,1:10])
+DEseq.RNA.no_agg<- DESeqDataSetFromMatrix(countData = TCGA.BRCA.htseq_counts.fil.no_agg.rounded,
+                                    colData = batches.RNA.fil.no_agg.rounded,
+                                    design = ~ 1)
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
