@@ -115,7 +115,50 @@ save(batch.estimate.ShipDate.rna,file = "batch.estimate.ShipDate.rna")
 pca.data.RNA <- prcomp(input.kBET, center=TRUE) #compute PCA representation of the data
 save(pca.data.RNA,file = "pca.data.RNA.Rdata")
 ```
+##Plotting the data from kbety
+```{r}
+##load the data 
+library(ggplot2)
+load("batch.estimate.TSS.rna.Rdata")
+plot.data.TSS <- data.frame(class=rep(c('observed', 'expected'), 
+                                  each=length(batch.estimate.TSS.rna$stats$kBET.observed)), 
+                        data =  c(batch.estimate.TSS.rna$stats$kBET.observed,
+                                  batch.estimate.TSS.rna$stats$kBET.expected))
+TSS.g <- ggplot(plot.data, aes(class, data)) + geom_boxplot() + 
+     labs(x='Test', y='Rejection rate',title='kBET test results, TSS') +
+     theme_bw() +  
+     scale_y_continuous(limits=c(0,1))
+plot(TSS.g)
+```
 
+
+
+```{r}
+load("batch.estimate.batch_id.rna.Rdata")
+
+plot.data.BatchID <- data.frame(class=rep(c('observed', 'expected'), 
+                                  each=length(batch.estimate.batch_id.rna$stats$kBET.observed)), 
+                        data =  c(batch.estimate.batch_id.rna$stats$kBET.observed,
+                                  batch.estimate.batch_id.rna$stats$kBET.expected))
+BatchID.g <- ggplot(plot.data, aes(class, data)) + geom_boxplot() + 
+     labs(x='Test', y='Rejection rate',title='kBET test results, BatchID') +
+     theme_bw() +  
+     scale_y_continuous(limits=c(0,1))
+plot(BatchID.g)
+```
+
+```{r}
+load("/Volumes/bck1/new_project_enigma/batch.estimate.ShipDate.rna.Rdata")
+plot.data.ShipDate <- data.frame(class=rep(c('observed', 'expected'), 
+                                  each=length(batch.estimate.ShipDate.rna$stats$kBET.observed)), 
+                        data =  c(batch.estimate.ShipDate.rna$stats$kBET.observed,
+                                  batch.estimate.ShipDate.rna$stats$kBET.expected))
+ShipDate.g <- ggplot(plot.data, aes(class, data)) + geom_boxplot() + 
+     labs(x='Test', y='Rejection rate',title='kBET test results, ShipDate') +
+     theme_bw() +  
+     scale_y_continuous(limits=c(0,1))
+plot(ShipDate.g)
+```
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
 
 When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
