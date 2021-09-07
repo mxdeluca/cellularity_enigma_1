@@ -52,8 +52,14 @@ dim(TCGA.BRCA.htseq_counts.fil.no_agg) #  60488  1212 lost 5 samples
 ## Deciding on the pathway for preprocessing the RNAseq data 
 ```{r}
 library(DESeq2)
-## need to round to integer 
-TCGA.BRCA.htseq_counts.fil.no_agg.rounded <- round(TCGA.BRCA.htseq_counts.fil.no_agg)
+## need to round to integer  # https://support.bioconductor.org/p/105964/
+## remove the previous tranformation applied to the data (https://www.biostars.org/p/383669/)
+TCGA.BRCA.htseq_counts.fil.no_agg.no_log <- 2^TCGA.BRCA.htseq_counts.fil.no_agg  
+head(TCGA.BRCA.htseq_counts.fil.no_agg.no_log[1:5,1:5]) ##  log2(count+1) removed the log2 
+TCGA.BRCA.htseq_counts.fil.no_agg.no_log <- TCGA.BRCA.htseq_counts.fil.no_agg.no_log - 1 ## remove the  + 1
+head(TCGA.BRCA.htseq_counts.fil.no_agg.no_log[1:5,1:5]) ##  log2(count+1) removed the log2 
+TCGA.BRCA.htseq_counts.fil.no_agg.rounded <- round(TCGA.BRCA.htseq_counts.fil.no_agg.no_log)
+head(TCGA.BRCA.htseq_counts.fil.no_agg.rounded[1;5,1:5]) ## rounded 
 # generating the phenotype dataframe for the  dataframe 
 batches.RNA.fil.no_agg.rounded <- batches.RNA[which(batches.RNA$Sample_Name %in% colnames(TCGA.BRCA.htseq_counts.fil.no_agg.rounded)),]
 batches.RNA.fil.no_agg.rounded <- batches.RNA.fil.no_agg.rounded[match(colnames(TCGA.BRCA.htseq_counts.fil.no_agg.rounded),batches.RNA.fil.no_agg.rounded$Sample_Name),]
@@ -65,6 +71,49 @@ head(TCGA.BRCA.htseq_counts.fil.no_agg.rounded[1:10,1:10])
 DEseq.RNA.no_agg<- DESeqDataSetFromMatrix(countData = TCGA.BRCA.htseq_counts.fil.no_agg.rounded,
                                     colData = batches.RNA.fil.no_agg.rounded,
                                     design = ~ 1)
+
+DEseq.RNA.no_agg.dds <- estimateSizeFactors(DEseq.RNA.no_agg)  # Accounts for the different sequencing depths among your libraries 
+
+idx <- rowSums(counts(DEseq.RNA.no_agg.dds) >= 5 ) >= 3 ## filtering 
+DEseq.RNA.no_agg.dds.fil <- DEseq.RNA.no_agg.dds[idx,]
+save(DEseq.RNA.no_agg.dds.fil,file = "DEseq.RNA.no_agg.dds.fil.Rdata")
+
+
+```
+# qsub -I -l select=1:ncpus=1:mem=50GB -l walltime=00:60:00 -A UQ-Health-SOM
+```{r}
+library(DESeq2)
+setwd("/state/partition1/pbs/tmpdir/pbs.749191.awonmgr2")
+load("DEseq.RNA.no_agg.dds.fil.Rdata")
+## running the DESeq function on the cluster  + VST transformation
+DEseq.RNA.no_agg.dds.fil.run <- DESeq(DEseq.RNA.no_agg.dds.fil)  ## run the DESeq algorithm
+save(DEseq.RNA.no_agg.dds.fil.run,file = "DEseq.RNA.no_agg.dds.fil.run.Rdata")
+vst.TCGA <- vst(DEseq.RNA.no_agg.dds.fil.run, blind=FALSE)  # VST tranformation to take out the varian from the data of interest !
+save(vst.TCGA,file  = "vst.TCGA.Rdata")
+```
+## Estimate the possible presence of batch effects in the data
+```{r}
+setwd("/state/partition1/pbs/tmpdir/pbs.749193.awonmgr2")
+load("vst.TCGA.Rdata")
+load("batches.RNA.fil.no_agg.rounded.Rdata")
+input.rna <- assay(vst.TCGA)
+head(input.rna[1:10,1:10])
+## check order of samples in the pheno and the actual data 
+all(colnames(input.rna) == batches.RNA.fil.no_agg.rounded$Sample_Name)  ## all good ! 
+
+library(kBET)
+input.kBET <- t(input.rna)
+batch.estimate.batch_id.rna <- kBET(input.kBET,batches.RNA.fil.no_agg.rounded$BatchId)
+save(batch.estimate.batch_id.rna,file = "batch.estimate.batch_id.rna.Rdata")
+
+batch.estimate.TSS.rna <- kBET(input.kBET,batches.RNA.fil.no_agg.rounded$TSS)
+save(batch.estimate.TSS.rna,file = "batch.estimate.TSS.rna.Rdata")
+
+batch.estimate.ShipDate.rna <- kBET(input.kBET,batches.RNA.fil.no_agg.rounded$ShipDate)
+save(batch.estimate.ShipDate.rna,file = "batch.estimate.ShipDate.rna")
+
+pca.data.RNA <- prcomp(input.kBET, center=TRUE) #compute PCA representation of the data
+save(pca.data.RNA,file = "pca.data.RNA.Rdata")
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
